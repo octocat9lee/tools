@@ -11,6 +11,7 @@ typedef void (*MallocFunc)(const int, const int);
 
 void MallocMemoryInMap(const int size, const int blockSize)
 {
+    cout << "MallocMemoryInMap" << endl;
     std::map<int, char*> memoryMap;
     int blockSizeKb = blockSize * 1024;
     for(int i = 0; i < size / blockSize; ++i)
@@ -30,8 +31,32 @@ void MallocMemoryInMap(const int size, const int blockSize)
     cout << "Free Memory" << endl;
 }
 
+void MallocMemoryInMapDelNull(const int size, const int blockSize)
+{
+    cout << "MallocMemoryInMapDelNull" << endl;
+    std::map<int, char*> memoryMap;
+    int blockSizeKb = blockSize * 1024;
+    for(int i = 0; i < size / blockSize; ++i)
+    {
+        char *p = new char[blockSizeKb];
+        char v = rand() % 128;
+        memset(p, v, blockSizeKb);
+        //memoryMap.insert(make_pair(i, (char*)NULL));
+        memoryMap.insert(make_pair(i, p));
+    }
+    sleep(5);
+    memoryMap.clear();
+    std::map<int, char*>::iterator iter = memoryMap.begin();
+    for(; iter != memoryMap.end(); ++iter)
+    {
+        delete [] iter->second;
+    }
+    cout << "Free Memory" << endl;
+}
+
 void MallocMemoryInVec(const int size, const int blockSize)
 {
+    cout << "MallocMemoryInVec" << endl;
     std::vector<char*> memoryVec;
     memoryVec.reserve(size / blockSize);
     int blockSizeKb = blockSize * 1024;
@@ -54,6 +79,7 @@ void MallocMemoryInVec(const int size, const int blockSize)
 
 void MallocMemoryInArray(const int size, const int blockSize)
 {
+    cout << "MallocMemoryInArray" << endl;
     char** memoryArray = new char*[size / blockSize];
     int blockSizeKb = blockSize * 1024;
     for(int i = 0; i < size / blockSize; ++i)
@@ -78,14 +104,14 @@ int main()
     int initSize = 0;
     int randSize = 0;
     int onceSize = 0;
-    cout << "Please Input Container Type (0:Map 1:Vector 2:Array) "
+    cout << "Please Input Container Type (0:Map 1:Vector 2:Array 3:MapDelNull) "
         << "Initialize Size[MB], Rand Size[MB] and Once Size [KB]" << endl;
     cin >> containerType >> initSize >> randSize >> onceSize;
     initSize *= 1024;
     srand((unsigned)time(NULL));
 
-    MallocFunc mallocFuncArray[3] = {MallocMemoryInMap,
-        MallocMemoryInVec, MallocMemoryInArray};
+    MallocFunc mallocFuncArray[4] = {MallocMemoryInMap,
+        MallocMemoryInVec, MallocMemoryInArray, MallocMemoryInMapDelNull};
 
     while(true)
     {
