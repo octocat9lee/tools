@@ -11,9 +11,9 @@
 - 将makefile基本选项以及生成规则进行封装在makefile.pub中，从而简化makefile文件的编写
 - 使用预定义宏打印可执行文件或者动态库版本信息，方便版本管理
 ## 使用示例 ##
-具体使用示例见shared、static以及exe目录下makefile文件
+具体使用示例见shared、static以及exe目录下makefile文件   
 
-#log4cplusfacade#
+# log4cplusfacade #
 对开源日志库log4cplus封装，实现更简单方便调用
 ## 使用示例 ##
 step1: 定义日志实例  
