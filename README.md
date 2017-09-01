@@ -5,3 +5,8 @@
 # malloctest #
 当进程初始时分配较大堆内存，使用std::map存储分配指针，然后遍历map释放，再在运行时分配比初始化时小的多的堆内存，使用top查看，进程占用内存始终保持初始分配的高内存；如果使用std::vector和标准数组则内存及时释放。
 [http://www.cnblogs.com/lookof/archive/2013/03/26/2981768.html](http://www.cnblogs.com/lookof/archive/2013/03/26/2981768.html "glibc内存管理")
+# makefile #
+- 将makefile基本选项以及生成规则进行封装在makefile.pub中，从而简化makefile文件的编写
+- 使用预定义宏打印可执行文件或者动态库版本信息，方便版本管理
+## 使用示例 ##
+具体使用示例见shared、static以及exe目录下makefile文件

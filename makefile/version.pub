@@ -1,0 +1,18 @@
+VERSION_SRC=../version_ctrl.cpp
+SVN_CODE=NOT_SET_YET
+PRODUCT_CODE=OCTOCAT9LEE
+VERSION_CODE=V00R00C10
+BUILD_CODE=B001
+
+version_code="const char version_code[]=\"[version] $(PRODUCT_CODE) $(VERSION_CODE)-$(BUILD_CODE)\";"
+build_time="const char build_time[]=\"[build_time] $(shell date "+%Y-%m-%d %H:%M:%S")\";"
+svn_info="const char svn_info[]=\"[svn_info] $(SVN_CODE)\";"
+version_info="const char version_info[]=\"[information] NOT SET\";"
+
+VERSION_DEF=-D_VERSION_CODE_=$(version_code) \
+            -D_BUILD_TIME_=$(build_time) \
+            -D_VERSION_INFO_=$(version_info) \
+            -D_SVN_INFO_=$(svn_info)
+
+VERSION_FUNC=lib_print_version
+
