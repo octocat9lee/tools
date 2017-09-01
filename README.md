@@ -10,3 +10,16 @@
 - 使用预定义宏打印可执行文件或者动态库版本信息，方便版本管理
 ## 使用示例 ##
 具体使用示例见shared、static以及exe目录下makefile文件
+#log4cplusfacade#
+对开源日志库log4cplus封装，实现更简单方便调用
+## 使用示例 ##
+step1: 定义日志实例  
+    `DECLARE_GET_LOGGER("Logger.Global")`  
+step2: 使用配置文件初始化实例  
+    `INIT_LOGGER("../config/log.conf");`  
+
+## C++风格使用示例 ##
+    LOG_DEBUG("debug " << i);
+## C风格使用示例 ##
+    CLOG_DEBUG(" u [%u]", static_cast<unsigned int>(i));
+
