@@ -25,3 +25,21 @@ step2: 使用配置文件初始化实例
 ## C风格使用示例 ##
     CLOG_DEBUG(" u [%u]", static_cast<unsigned int>(i));
 
+# codetrace #
+代码调用关系跟踪
+## 使用示例 ##
+    make
+    ./code_trace
+    ./code_trace.sh code_trace code_trace.out
+## 输出结果 ##
+Enter main called from ?? (??:0)  
+Enter bar() called from main (??:0)  
+Enter zoo() called from bar() (??:0)  
+Enter foo() called from zoo() (??:0)  
+Exit  foo()  
+Exit  zoo()  
+Exit  bar()  
+Exit  main
+## TODO ##
+代码行号未正确显示  
+
