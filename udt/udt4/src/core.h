@@ -56,7 +56,7 @@ written by
 
 enum UDTSockType {UDT_STREAM = 1, UDT_DGRAM};
 
-class CUDT
+class CUDT //UDT Socket接口和UDT传输控制块
 {
 friend class CUDTSocket;
 friend class CUDTUnited;
@@ -282,7 +282,7 @@ private: // Packet sizes
    int m_iPktSize;                              // Maximum/regular packet size, in bytes
    int m_iPayloadSize;                          // Maximum/regular payload size, in bytes
 
-private: // Options
+private: // Options 对UDT通过setsockopt进行相关参数的设置
    int m_iMSS;                                  // Maximum Segment Size, in bytes
    bool m_bSynSending;                          // Sending syncronization mode
    bool m_bSynRecving;                          // Receiving syncronization mode
@@ -299,12 +299,12 @@ private: // Options
    bool m_bReuseAddr;				// reuse an exiting port or not, for UDP multiplexer
    int64_t m_llMaxBW;				// maximum data transfer rate (threshold)
 
-private: // congestion control
+private: // congestion control  拥塞控制，用户可以自定义
    CCCVirtualFactory* m_pCCFactory;             // Factory class to create a specific CC instance
    CCC* m_pCC;                                  // congestion control class
    CCache<CInfoBlock>* m_pCache;		// network information cache
 
-private: // Status
+private: // Status  拥塞控制状态，如关闭、连接等，还包含拥塞控制参数如RTT等
    volatile bool m_bListening;                  // If the UDT entit is listening to connection
    volatile bool m_bConnecting;			// The short phase when connect() is called but not yet completed
    volatile bool m_bConnected;                  // Whether the connection is on or off
@@ -327,7 +327,7 @@ private: // Status
    CHandShake m_ConnRes;			// connection response
    int64_t m_llLastReqTime;			// last time when a connection request is sent
 
-private: // Sending related data
+private: // Sending related data 发送缓存指针，发送端丢失列表指针
    CSndBuffer* m_pSndBuffer;                    // Sender buffer
    CSndLossList* m_pSndLossList;                // Sender loss list
    CPktTimeWindow* m_pSndTimeWindow;            // Packet sending time window
@@ -349,7 +349,7 @@ private: // Sending related data
 
    void CCUpdate();
 
-private: // Receiving related data
+private: // Receiving related data 接收缓存指针
    CRcvBuffer* m_pRcvBuffer;                    // Receiver buffer
    CRcvLossList* m_pRcvLossList;                // Receiver loss list
    CACKWindow* m_pACKWindow;                    // ACK history window
@@ -365,7 +365,7 @@ private: // Receiving related data
 
    int32_t m_iPeerISN;                          // Initial Sequence Number of the peer side
 
-private: // synchronization: mutexes and conditions
+private: // synchronization: mutexes and conditions 同步设施，如果互斥器条件变量等
    pthread_mutex_t m_ConnectionLock;            // used to synchronize connection operation
 
    pthread_cond_t m_SendBlockCond;              // used to block "send" call
@@ -390,7 +390,7 @@ private: // Generation and processing of packets
    int processData(CUnit* unit);
    int listen(sockaddr* addr, CPacket& packet);
 
-private: // Trace
+private: // Trace 性能跟踪数据
    uint64_t m_StartTime;                        // timestamp when the UDT entity is started
    int64_t m_llSentTotal;                       // total number of sent data packets, including retransmissions
    int64_t m_llRecvTotal;                       // total number of received packets
@@ -416,7 +416,7 @@ private: // Trace
    int64_t m_llSndDuration;			// real time for sending
    int64_t m_llSndDurationCounter;		// timers to record the sending duration
 
-private: // Timers
+private: // Timers 定时器
    uint64_t m_ullCPUFrequency;                  // CPU clock frequency, used for Timer, ticks per microsecond
 
    static const int m_iSYNInterval;             // Periodical Rate Control Interval, 10000 microsecond
@@ -440,15 +440,15 @@ private: // Timers
 
    void checkTimers();
 
-private: // for UDP multiplexer
+private: // for UDP multiplexer UDP复用器
    CSndQueue* m_pSndQueue;			// packet sending queue
    CRcvQueue* m_pRcvQueue;			// packet receiving queue
    sockaddr* m_pPeerAddr;			// peer address
    uint32_t m_piSelfIP[4];			// local UDP IP address
    CSNode* m_pSNode;				// node information for UDT list used in snd queue
-   CRNode* m_pRNode;                            // node information for UDT list used in rcv queue
+   CRNode* m_pRNode;                // node information for UDT list used in rcv queue
 
-private: // for epoll
+private: // for epoll epoll函数
    std::set<int> m_sPollID;                     // set of epoll ID to trigger
    void addEPoll(const int eid);
    void removeEPoll(const int eid);
