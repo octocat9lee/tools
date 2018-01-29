@@ -178,6 +178,7 @@ CUDTUnited::~CUDTUnited()
    delete m_pCache;
 }
 
+//主要用于开启垃圾回收线程
 int CUDTUnited::startup()
 {
    CGuard gcinit(m_InitLock);
@@ -196,7 +197,6 @@ int CUDTUnited::startup()
    #endif
 
    //init CTimer::EventLock
-
    if (m_bGCStatus)
       return true;
 
@@ -212,11 +212,12 @@ int CUDTUnited::startup()
       m_GCThread = CreateThread(NULL, 0, garbageCollect, this, 0, &ThreadID);
    #endif
 
-   m_bGCStatus = true;
+   m_bGCStatus = true;  //设置垃圾回收线程的状态，防止垃圾回收线程被启动多次
 
    return 0;
 }
 
+//主要功能是通知垃圾回收线程，回收资源
 int CUDTUnited::cleanup()
 {
    CGuard gcinit(m_InitLock);
@@ -253,6 +254,11 @@ int CUDTUnited::cleanup()
    return 0;
 }
 
+
+//1、检查是否开启垃圾回收线程；
+//2、创建一个UDT套接口和一个UDT传输控制块；
+//3、完成UDT套接口和UDT传输控制块部分参数的初始化；
+//4、将UDT套接口所创建的ID和UDT传输控制块关联起来。
 UDTSOCKET CUDTUnited::newSocket(int af, int type)
 {
    if ((type != SOCK_STREAM) && (type != SOCK_DGRAM))
@@ -262,11 +268,11 @@ UDTSOCKET CUDTUnited::newSocket(int af, int type)
 
    try
    {
-      ns = new CUDTSocket;
-      ns->m_pUDT = new CUDT;
+      ns = new CUDTSocket; //每调用一次UDT::socket,下层就会创建一个新的套接字
+      ns->m_pUDT = new CUDT; //创建一个新的 UDT 传输控制块
       if (AF_INET == af)
       {
-         ns->m_pSelfAddr = (sockaddr*)(new sockaddr_in);
+         ns->m_pSelfAddr = (sockaddr*)(new sockaddr_in); //创建存储自身地址的空间
          ((sockaddr_in*)(ns->m_pSelfAddr))->sin_port = 0;
       }
       else
@@ -284,7 +290,7 @@ UDTSOCKET CUDTUnited::newSocket(int af, int type)
    CGuard::enterCS(m_IDLock);
    ns->m_SocketID = -- m_SocketID;
    CGuard::leaveCS(m_IDLock);
-
+   //完成UDT套接字ns和传输控制块m_pUDT相关变量的初始化 
    ns->m_Status = INIT;
    ns->m_ListenSocket = 0;
    ns->m_pUDT->m_SocketID = ns->m_SocketID;
@@ -296,14 +302,14 @@ UDTSOCKET CUDTUnited::newSocket(int af, int type)
    CGuard::enterCS(m_ControlLock);
    try
    {
-      m_Sockets[ns->m_SocketID] = ns;
+      m_Sockets[ns->m_SocketID] = ns; //std::map<UDTSOCKET, CUDTSocket*> m_Sockets;UDT套接字ID和UDT套接字的映射
    }
    catch (...)
    {
       //failure and rollback
       CGuard::leaveCS(m_ControlLock);
       delete ns;
-      ns = NULL;
+      ns = NULL; //删除后一定要赋值为NULL，后续抛出异常
    }
    CGuard::leaveCS(m_ControlLock);
 
@@ -499,7 +505,7 @@ UDTSTATUS CUDTUnited::getStatus(const UDTSOCKET u)
 
 int CUDTUnited::bind(const UDTSOCKET u, const sockaddr* name, int namelen)
 {
-   CUDTSocket* s = locate(u);
+   CUDTSocket* s = locate(u); //由套接字ID获取对应的套接字
    if (NULL == s)
       throw CUDTException(5, 4, 0);
 
@@ -521,7 +527,7 @@ int CUDTUnited::bind(const UDTSOCKET u, const sockaddr* name, int namelen)
          throw CUDTException(5, 3, 0);
    }
 
-   s->m_pUDT->open();
+   s->m_pUDT->open(); //完成传输控制块相关参数的初始化，相关定时器初始化
    updateMux(s, name);
    s->m_Status = OPENED;
 
@@ -599,8 +605,8 @@ int CUDTUnited::listen(const UDTSOCKET u, int backlog)
 
    try
    {
-      s->m_pQueuedSockets = new set<UDTSOCKET>;
-      s->m_pAcceptSockets = new set<UDTSOCKET>;
+      s->m_pQueuedSockets = new set<UDTSOCKET>; //等待accept的队列
+      s->m_pAcceptSockets = new set<UDTSOCKET>; //已经accept的队列
    }
    catch (...)
    {
@@ -609,6 +615,7 @@ int CUDTUnited::listen(const UDTSOCKET u, int backlog)
       throw CUDTException(3, 2, 0);
    }
 
+   //调用core.cpp文件中的CUDT::listen()函数
    s->m_pUDT->listen();
 
    s->m_Status = LISTENING;
@@ -648,7 +655,7 @@ UDTSOCKET CUDTUnited::accept(const UDTSOCKET listen, sockaddr* addr, int* addrle
             // This socket has been closed.
             accepted = true;
          }
-         else if (ls->m_pQueuedSockets->size() > 0)
+         else if (ls->m_pQueuedSockets->size() > 0) //set of connections waiting for accept(),握手报文是通过接收线程进行接收的，接收之后存在set中
          {
             u = *(ls->m_pQueuedSockets->begin());
             ls->m_pAcceptSockets->insert(ls->m_pAcceptSockets->end(), u);
@@ -745,6 +752,7 @@ int CUDTUnited::connect(const UDTSOCKET u, const sockaddr* name, int namelen)
          throw CUDTException(5, 3, 0);
    }
 
+   //一个UDT实体开始作为server（listener）。server接收和处理连接请求，并为每一个新的连接创建一个new UDT socket
    // a socket can "connect" only if it is in INIT or OPENED status
    if (INIT == s->m_Status)
    {
@@ -766,6 +774,10 @@ int CUDTUnited::connect(const UDTSOCKET u, const sockaddr* name, int namelen)
    s->m_Status = CONNECTING;
    try
    {
+      //当一个client要跟server建立连接的时候，首先会发送一个握手报文给server。
+      //client会每隔一个固定的间隔interbal发送一个握手报文（这个固定间隔在代码中是250ms），
+      //当遇到如下两种情况之一的时候才停止发送：1、收到server反馈回来的握手的报文；2、连接超时。
+      //对应于core.cpp中重载的connect函数
       s->m_pUDT->connect(name);
    }
    catch (CUDTException e)
@@ -1371,6 +1383,10 @@ void CUDTUnited::checkTLSValue()
 }
 #endif
 
+//updateMux主要完成以下几项任务：
+//1、查找复用器multiplexer中是否有该port，若有则对该端口进行复用，即使用已有的发送/接收队列；
+//2、若复用器multiplexer中没有这个port，则创建一个channel对象，并通过该channel对象创建/绑定udp套接口，并对udp套接口的接收和发送缓存进行设置；
+//3、另外，还得新建定时器、发送和接收队列，在发送和接收队列中完成了发送和接收线程的创建；
 void CUDTUnited::updateMux(CUDTSocket* s, const sockaddr* addr, const UDPSOCKET* udpsock)
 {
    CGuard cg(m_ControlLock);
@@ -1388,7 +1404,7 @@ void CUDTUnited::updateMux(CUDTSocket* s, const sockaddr* addr, const UDPSOCKET*
             {
                // reuse the existing multiplexer
                ++ i->second.m_iRefCount;
-               s->m_pUDT->m_pSndQueue = i->second.m_pSndQueue;
+               s->m_pUDT->m_pSndQueue = i->second.m_pSndQueue; //端口复用后，不用创建新的发送线程/接收线程
                s->m_pUDT->m_pRcvQueue = i->second.m_pRcvQueue;
                s->m_iMuxID = i->second.m_iID;
                return;
@@ -1425,21 +1441,22 @@ void CUDTUnited::updateMux(CUDTSocket* s, const sockaddr* addr, const UDPSOCKET*
 
    sockaddr* sa = (AF_INET == s->m_pUDT->m_iIPversion) ? (sockaddr*) new sockaddr_in : (sockaddr*) new sockaddr_in6;
    m.m_pChannel->getSockAddr(sa);
+   //将port保存,如果下次有其它连接bind该端口时，可以在前面的if语句中进行port复用
    m.m_iPort = (AF_INET == s->m_pUDT->m_iIPversion) ? ntohs(((sockaddr_in*)sa)->sin_port) : ntohs(((sockaddr_in6*)sa)->sin6_port);
    if (AF_INET == s->m_pUDT->m_iIPversion) delete (sockaddr_in*)sa; else delete (sockaddr_in6*)sa;
 
-   m.m_pTimer = new CTimer;
+   m.m_pTimer = new CTimer; //新建定时器对象 
 
-   m.m_pSndQueue = new CSndQueue;
-   m.m_pSndQueue->init(m.m_pChannel, m.m_pTimer);
-   m.m_pRcvQueue = new CRcvQueue;
-   m.m_pRcvQueue->init(32, s->m_pUDT->m_iPayloadSize, m.m_iIPversion, 1024, m.m_pChannel, m.m_pTimer);
+   m.m_pSndQueue = new CSndQueue; //新建发送队列对
+   m.m_pSndQueue->init(m.m_pChannel, m.m_pTimer); //创建发送队列的工作线程
+   m.m_pRcvQueue = new CRcvQueue; //新建接收队列对象 
+   m.m_pRcvQueue->init(32, s->m_pUDT->m_iPayloadSize, m.m_iIPversion, 1024, m.m_pChannel, m.m_pTimer);//创建接收队列的工作线程
 
-   m_mMultiplexer[m.m_iID] = m;
+   m_mMultiplexer[m.m_iID] = m; //将套接字ID和复用器绑定在一起
 
    s->m_pUDT->m_pSndQueue = m.m_pSndQueue;
    s->m_pUDT->m_pRcvQueue = m.m_pRcvQueue;
-   s->m_iMuxID = m.m_iID;
+   s->m_iMuxID = m.m_iID; //套接字ID和复用器ID是一样的
 }
 
 void CUDTUnited::updateMux(CUDTSocket* s, const CUDTSocket* ls)
@@ -1488,7 +1505,7 @@ void CUDTUnited::updateMux(CUDTSocket* s, const CUDTSocket* ls)
          timeout.tv_sec = now.tv_sec + 1;
          timeout.tv_nsec = now.tv_usec * 1000;
 
-         pthread_cond_timedwait(&self->m_GCStopCond, &self->m_GCStopLock, &timeout);
+         pthread_cond_timedwait(&self->m_GCStopCond, &self->m_GCStopLock, &timeout); //1s循环一次会导致CPU利用率升高
       #else
          WaitForSingleObject(self->m_GCStopCond, 1000);
       #endif
@@ -1562,7 +1579,7 @@ int CUDT::cleanup()
 UDTSOCKET CUDT::socket(int af, int type, int)
 {
    if (!s_UDTUnited.m_bGCStatus)
-      s_UDTUnited.startup();
+      s_UDTUnited.startup(); //防止前面的startup中垃圾回收线程没有开启
 
    try
    {

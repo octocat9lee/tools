@@ -561,7 +561,7 @@ void CUDT::listen()
       return;
 
    // if there is already another socket listening on the same port
-   if (m_pRcvQueue->setListener(this) < 0)
+   if (m_pRcvQueue->setListener(this) < 0) //判断是否有其它传输控制块监听此端口
       throw CUDTException(5, 11, 0);
 
    m_bListening = true;
@@ -600,16 +600,18 @@ void CUDT::connect(const sockaddr* serv_addr)
    m_ConnReq.m_iType = m_iSockType;
    m_ConnReq.m_iMSS = m_iMSS;
    m_ConnReq.m_iFlightFlagSize = (m_iRcvBufSize < m_iFlightFlagSize)? m_iRcvBufSize : m_iFlightFlagSize;
-   m_ConnReq.m_iReqType = (!m_bRendezvous) ? 1 : 0;
+   m_ConnReq.m_iReqType = (!m_bRendezvous) ? 1 : 0; //默认为false, 传统模式下客户端发起的握手报文的类型为1
    m_ConnReq.m_iID = m_SocketID;
    CIPAddress::ntop(serv_addr, m_ConnReq.m_piPeerIP, m_iIPversion);
 
+   // 当server第一次接收到来自client握手请求的时候，它会根据client的address和一个secret key产生一个cookie值，
+   // 然后反馈给client。然后，client必须把收到的cookie反馈给server。
    // Random Initial Sequence Number
    srand((unsigned int)CTimer::getTime());
    m_iISN = m_ConnReq.m_iISN = (int32_t)(CSeqNo::m_iMaxSeqNo * (double(rand()) / RAND_MAX));
 
    m_iLastDecSeq = m_iISN - 1;
-   m_iSndLastAck = m_iISN;
+   m_iSndLastAck = m_iISN;  // Last ACK received
    m_iSndLastDataAck = m_iISN;
    m_iSndCurrSeqNo = m_iISN - 1;
    m_iSndLastAck2 = m_iISN;
@@ -617,19 +619,19 @@ void CUDT::connect(const sockaddr* serv_addr)
 
    // Inform the server my configurations.
    CPacket request;
-   char* reqdata = new char [m_iPayloadSize];
+   char* reqdata = new char [m_iPayloadSize]; //m_iPayloadSize =  m_iMSS - 28 - CPacket::m_iPktHdrSize (1500 - 28 - 16) 
    request.pack(0, NULL, reqdata, m_iPayloadSize);
    // ID = 0, connection request
    request.m_iID = 0;
 
    int hs_size = m_iPayloadSize;
-   m_ConnReq.serialize(reqdata, hs_size);
+   m_ConnReq.serialize(reqdata, hs_size); //将握手报文序列化到reqdata中
    request.setLength(hs_size);
-   m_pSndQueue->sendto(serv_addr, request);
+   m_pSndQueue->sendto(serv_addr, request); //控制报文通过高优先级的Channel直接发送
    m_llLastReqTime = CTimer::getTime();
 
    // asynchronous connect, return immediately
-   if (!m_bSynRecving)
+   if (!m_bSynRecving)  //同步接收模式，默认为true
    {
       delete [] reqdata;
       return;
@@ -647,6 +649,7 @@ void CUDT::connect(const sockaddr* serv_addr)
       // avoid sending too many requests, at most 1 request per 250ms
       if (CTimer::getTime() - m_llLastReqTime > 250000)
       {
+         //250ms后仍没收到回复的握手报文，则再次发送握手连接
          m_ConnReq.serialize(reqdata, hs_size);
          request.setLength(hs_size);
          if (m_bRendezvous)
@@ -692,122 +695,140 @@ void CUDT::connect(const sockaddr* serv_addr)
 
 int CUDT::connect(const CPacket& response) throw ()
 {
-   // this is the 2nd half of a connection request. If the connection is setup successfully this returns 0.
-   // returning -1 means there is an error.
-   // returning 1 or 2 means the connection is in process and needs more handshake
+    // this is the 2nd half of a connection request. If the connection is setup successfully this returns 0.
+    // returning -1 means there is an error.
+    // returning 1 or 2 means the connection is in process and needs more handshake
 
-   if (!m_bConnecting)
-      return -1;
+    //当server接收到一个握手报文和正确的cookie时，将握手报文中的packet size 和maximum window size信息提取出来，
+    //并同server端自己的packet size 和maximum window size信息相比较，将较小的packet size 和maximum window size信息赋值给自己。
+    //把这个结果反馈给client端，并携带上server的版本号和初始序列号。当完成这个步骤之后，server端就开始准备发送/接收数据。
+    //然后，如果收到来自same client端的其它handshakes的时候，server端仍要回复response packet。（这是为了防止server反馈回去的包丢失）
 
-   if (m_bRendezvous && ((0 == response.getFlag()) || (1 == response.getType())) && (0 != m_ConnRes.m_iType))
-   {
-      //a data packet or a keep-alive packet comes, which means the peer side is already connected
-      // in this situation, the previously recorded response will be used
-      goto POST_CONNECT;
-   }
+    //一旦client收到server端反馈回来的handshake packet，它开始发送/接收数据。如果还收到其它response handshake 消息，则忽略掉。
+    //client端的连接类型会被设置成1，来自server端的response会被设置成-1
 
-   if ((1 != response.getFlag()) || (0 != response.getType()))
-      return -1;
+    //client应该检测这个来自server端的respones是否是original request产生的
 
-   m_ConnRes.deserialize(response.m_pcData, response.getLength());
+    //在汇合模式中，两个client同时发送一个连接请求。连接类型初始值为0，一旦peer端收到一个连接请求，peer端将发送一个response。
+    //如果连接类型为0，那么反馈的时候会被设置成-1；如果连接类型为-1，那么反馈的时候会被设置成-2；
+    //如果连接类型为-2，那么将不会有任何反馈信息。
 
-   if (m_bRendezvous)
-   {
-      // regular connect should NOT communicate with rendezvous connect
-      // rendezvous connect require 3-way handshake
-      if (1 == m_ConnRes.m_iReqType)
-         return -1;
+    //rendezvous peer 同样也会对handshake 中的信息（如版本号、包大小、窗口大小等信息）进行检查。
+    //当peer收到-1的response的时候，peer才会初始化连接。
+    //当peers都位于防火墙后面的时候，rendezvous connection是很有用的
 
-      if ((0 == m_ConnReq.m_iReqType) || (0 == m_ConnRes.m_iReqType))
-      {
-         m_ConnReq.m_iReqType = -1;
-         // the request time must be updated so that the next handshake can be sent out immediately.
-         m_llLastReqTime = 0;
-         return 1;
-      }
-   }
-   else
-   {
-      // set cookie
-      if (1 == m_ConnRes.m_iReqType)
-      {
-         m_ConnReq.m_iReqType = -1;
-         m_ConnReq.m_iCookie = m_ConnRes.m_iCookie;
-         m_llLastReqTime = 0;
-         return 1;
-      }
-   }
+    if(!m_bConnecting)
+        return -1;
+
+    if(m_bRendezvous && ((0 == response.getFlag()) || (1 == response.getType())) && (0 != m_ConnRes.m_iType))
+    {
+        //a data packet or a keep-alive packet comes, which means the peer side is already connected
+        // in this situation, the previously recorded response will be used
+        goto POST_CONNECT;
+    }
+
+    if((1 != response.getFlag()) || (0 != response.getType()))
+        return -1;
+
+    m_ConnRes.deserialize(response.m_pcData, response.getLength()); //将上一次握手报文反馈回来的信息提取出来缓存在本地，如cookie等
+
+    if(m_bRendezvous)
+    {
+        // regular connect should NOT communicate with rendezvous connect
+        // rendezvous connect require 3-way handshake
+        if(1 == m_ConnRes.m_iReqType)
+            return -1;
+
+        if((0 == m_ConnReq.m_iReqType) || (0 == m_ConnRes.m_iReqType))
+        {
+            m_ConnReq.m_iReqType = -1;
+            // the request time must be updated so that the next handshake can be sent out immediately.
+            m_llLastReqTime = 0;
+            return 1;
+        }
+    }
+    else
+    {
+        // set cookie
+        if(1 == m_ConnRes.m_iReqType)
+        {
+            m_ConnReq.m_iReqType = -1;
+            m_ConnReq.m_iCookie = m_ConnRes.m_iCookie;
+            m_llLastReqTime = 0;
+            return 1;
+        }
+    }
 
 POST_CONNECT:
-   // Remove from rendezvous queue
-   m_pRcvQueue->removeConnector(m_SocketID);
+    // Remove from rendezvous queue
+    m_pRcvQueue->removeConnector(m_SocketID);
 
-   // Re-configure according to the negotiated values.
-   m_iMSS = m_ConnRes.m_iMSS;
-   m_iFlowWindowSize = m_ConnRes.m_iFlightFlagSize;
-   m_iPktSize = m_iMSS - 28;
-   m_iPayloadSize = m_iPktSize - CPacket::m_iPktHdrSize;
-   m_iPeerISN = m_ConnRes.m_iISN;
-   m_iRcvLastAck = m_ConnRes.m_iISN;
-   m_iRcvLastAckAck = m_ConnRes.m_iISN;
-   m_iRcvCurrSeqNo = m_ConnRes.m_iISN - 1;
-   m_PeerID = m_ConnRes.m_iID;
-   memcpy(m_piSelfIP, m_ConnRes.m_piPeerIP, 16);
+    // Re-configure according to the negotiated values.
+    m_iMSS = m_ConnRes.m_iMSS;
+    m_iFlowWindowSize = m_ConnRes.m_iFlightFlagSize;
+    m_iPktSize = m_iMSS - 28;
+    m_iPayloadSize = m_iPktSize - CPacket::m_iPktHdrSize;
+    m_iPeerISN = m_ConnRes.m_iISN;
+    m_iRcvLastAck = m_ConnRes.m_iISN;
+    m_iRcvLastAckAck = m_ConnRes.m_iISN;
+    m_iRcvCurrSeqNo = m_ConnRes.m_iISN - 1;
+    m_PeerID = m_ConnRes.m_iID;
+    memcpy(m_piSelfIP, m_ConnRes.m_piPeerIP, 16);
 
-   // Prepare all data structures
-   try
-   {
-      m_pSndBuffer = new CSndBuffer(32, m_iPayloadSize);
-      m_pRcvBuffer = new CRcvBuffer(&(m_pRcvQueue->m_UnitQueue), m_iRcvBufSize);
-      // after introducing lite ACK, the sndlosslist may not be cleared in time, so it requires twice space.
-      m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
-      m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
-      m_pACKWindow = new CACKWindow(1024);
-      m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
-      m_pSndTimeWindow = new CPktTimeWindow();
-   }
-   catch (...)
-   {
-      throw CUDTException(3, 2, 0);
-   }
+    // Prepare all data structures
+    try
+    {
+        m_pSndBuffer = new CSndBuffer(32, m_iPayloadSize);
+        m_pRcvBuffer = new CRcvBuffer(&(m_pRcvQueue->m_UnitQueue), m_iRcvBufSize);
+        // after introducing lite ACK, the sndlosslist may not be cleared in time, so it requires twice space.
+        m_pSndLossList = new CSndLossList(m_iFlowWindowSize * 2);
+        m_pRcvLossList = new CRcvLossList(m_iFlightFlagSize);
+        m_pACKWindow = new CACKWindow(1024);
+        m_pRcvTimeWindow = new CPktTimeWindow(16, 64);
+        m_pSndTimeWindow = new CPktTimeWindow();
+    }
+    catch(...)
+    {
+        throw CUDTException(3, 2, 0);
+    }
 
-   CInfoBlock ib;
-   ib.m_iIPversion = m_iIPversion;
-   CInfoBlock::convert(m_pPeerAddr, m_iIPversion, ib.m_piIP);
-   if (m_pCache->lookup(&ib) >= 0)
-   {
-      m_iRTT = ib.m_iRTT;
-      m_iBandwidth = ib.m_iBandwidth;
-   }
+    CInfoBlock ib;
+    ib.m_iIPversion = m_iIPversion;
+    CInfoBlock::convert(m_pPeerAddr, m_iIPversion, ib.m_piIP);
+    if(m_pCache->lookup(&ib) >= 0)
+    {
+        m_iRTT = ib.m_iRTT;
+        m_iBandwidth = ib.m_iBandwidth;
+    }
 
-   m_pCC = m_pCCFactory->create();
-   m_pCC->m_UDT = m_SocketID;
-   m_pCC->setMSS(m_iMSS);
-   m_pCC->setMaxCWndSize(m_iFlowWindowSize);
-   m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
-   m_pCC->setRcvRate(m_iDeliveryRate);
-   m_pCC->setRTT(m_iRTT);
-   m_pCC->setBandwidth(m_iBandwidth);
-   m_pCC->init();
+    m_pCC = m_pCCFactory->create();
+    m_pCC->m_UDT = m_SocketID;
+    m_pCC->setMSS(m_iMSS);
+    m_pCC->setMaxCWndSize(m_iFlowWindowSize);
+    m_pCC->setSndCurrSeqNo(m_iSndCurrSeqNo);
+    m_pCC->setRcvRate(m_iDeliveryRate);
+    m_pCC->setRTT(m_iRTT);
+    m_pCC->setBandwidth(m_iBandwidth);
+    m_pCC->init(); //拥塞控制模块的初始化
 
-   m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
-   m_dCongestionWindow = m_pCC->m_dCWndSize;
+    m_ullInterval = (uint64_t)(m_pCC->m_dPktSndPeriod * m_ullCPUFrequency);
+    m_dCongestionWindow = m_pCC->m_dCWndSize;
 
-   // And, I am connected too.
-   m_bConnecting = false;
-   m_bConnected = true;
+    // And, I am connected too.
+    m_bConnecting = false;
+    m_bConnected = true;
 
-   // register this socket for receiving data packets
-   m_pRNode->m_bOnList = true;
-   m_pRcvQueue->setNewEntry(this);
+    // register this socket for receiving data packets
+    m_pRNode->m_bOnList = true;
+    m_pRcvQueue->setNewEntry(this);
 
-   // acknowledge the management module.
-   s_UDTUnited.connect_complete(m_SocketID);
+    // acknowledge the management module.
+    s_UDTUnited.connect_complete(m_SocketID);
 
-   // acknowledde any waiting epolls to write
-   s_UDTUnited.m_EPoll.update_events(m_SocketID, m_sPollID, UDT_EPOLL_OUT, true);
+    // acknowledde any waiting epolls to write
+    s_UDTUnited.m_EPoll.update_events(m_SocketID, m_sPollID, UDT_EPOLL_OUT, true);
 
-   return 0;
+    return 0;
 }
 
 void CUDT::connect(const sockaddr* peer, CHandShake* hs)

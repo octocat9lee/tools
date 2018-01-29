@@ -309,6 +309,7 @@ UDT_API extern const UDTSOCKET INVALID_SOCK;
 #undef ERROR
 UDT_API extern const int ERROR;
 
+//通过UDT库调用相关API函数的时候，会调用CUDT中的静态成员函数
 UDT_API int startup();
 UDT_API int cleanup();
 UDT_API UDTSOCKET socket(int af, int type, int protocol);

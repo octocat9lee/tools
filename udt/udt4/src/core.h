@@ -56,6 +56,7 @@ written by
 
 enum UDTSockType {UDT_STREAM = 1, UDT_DGRAM};
 
+//CUDT通过“static CUDTUnited s_UDTUnited”调用CUDTUnited类中成员函数
 class CUDT //UDT Socket接口和UDT传输控制块
 {
 friend class CUDTSocket;
