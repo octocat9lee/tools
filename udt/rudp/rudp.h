@@ -4,9 +4,9 @@
 #define MAX_PACKAGE (0x7fff-4)
 
 struct rudp_package {
-	struct rudp_package *next;
-	char *buffer;
-	int sz;
+    struct rudp_package *next;
+    char *buffer;
+    int sz;
 };
 
 struct rudp * rudp_new(int send_delay, int expired_time);
