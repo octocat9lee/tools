@@ -1810,7 +1810,8 @@ int CUDT::send(UDTSOCKET u, const char* buf, int len, int)
 {
    try
    {
-      CUDT* udt = s_UDTUnited.lookup(u);
+      CUDT* udt = s_UDTUnited.lookup(u); //通过套接字ID查找到对应的UDT传输控制块
+      //调用core.cpp中的CUDT::send(const char* data, int len)函数
       return udt->send(buf, len);
    }
    catch (CUDTException e)

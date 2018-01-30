@@ -1047,7 +1047,7 @@ int CUDT::send(const char* data, int len)
 
    CGuard sendguard(m_SendLock);
 
-   if (m_pSndBuffer->getCurrBufSize() == 0)
+   if (m_pSndBuffer->getCurrBufSize() == 0) //发送缓冲为空
    {
       // delay the EXP timer to avoid mis-fired timeout
       uint64_t currtime;
@@ -1055,6 +1055,7 @@ int CUDT::send(const char* data, int len)
       m_ullLastRspTime = currtime;
    }
 
+   //若发送缓冲超过8192个m_iPayloadSize，则等待一定的时间直到条件不满足
    if (m_iSndBufSize <= m_pSndBuffer->getCurrBufSize())
    {
       if (!m_bSynSending)
@@ -1156,6 +1157,7 @@ int CUDT::recv(char* data, int len)
 
    CGuard recvguard(m_RecvLock);
 
+   //若接收缓冲区为空，则等待指定的条件满足
    if (0 == m_pRcvBuffer->getRcvDataSize())
    {
       if (!m_bSynRecving)
