@@ -64,14 +64,14 @@ main() {
 
     rudp_send(U, t1, sizeof(t1));
     rudp_send(U, t2, sizeof(t2));
-    dump(rudp_update(U, NULL, 0, 1));
-    dump(rudp_update(U, NULL, 0, 1));
+    dump(rudp_update(U, NULL, 0, 1)); //返回t1和t2组成的消息
+    dump(rudp_update(U, NULL, 0, 1)); //返回心跳消息
     rudp_send(U, t3, sizeof(t3));
     rudp_send(U, t4, sizeof(t4));
     dump(rudp_update(U, NULL, 0, 1));
 
     char r1[] = { 02, 00, 00, 02, 00, 03 };
-    dump(rudp_update(U, r1, sizeof(r1), 1));
+    dump(rudp_update(U, r1, sizeof(r1), 1)); //请求重发id为0和3的数据
     dump_recv(U);
     char r2[] = { 5, 0, 1, 1,
                   5, 0, 3, 3,
