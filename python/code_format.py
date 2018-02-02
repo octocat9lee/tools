@@ -3,7 +3,7 @@
 import os
 
 lineList = []
-postfixes = ['.py', '.c', '.cc', '.cpp', '.h', '.hpp']
+postfixes = ['.c', '.cc', '.cpp', '.h', '.hpp']
 
 def deal_lines(file_name):
     cmd = "dos2unix %s" %file_name
