@@ -113,7 +113,8 @@ public:
 
     inline void bind_param(int i, const int& x)
     {
-        std::cout << "bind_param int: (" << i << ", " << x << ")" << std::endl;
+        std::cout << "bind_param int: (" << i << ", " << x << "), ";
+        printf("buffer addr: %p\n", &x);
         //bind_param(i, MYSQL_TYPE_LONG, (char*)&x, 0, 0, 0);
         params[i].buffer_type = MYSQL_TYPE_LONG;
         params[i].buffer = (void*)&x;
@@ -122,10 +123,12 @@ public:
 
     inline void bind_param(int i, const std::string& x)
     {
-        std::cout << "bind_param string: (" << i << ", " << x << ")" << std::endl;
+        std::cout << "bind_param string: (" << i << ", " << x << "), ";
+        printf("buffer addr: %p\n", x.c_str());
         //bind_param(i, MYSQL_TYPE_STRING, (char*)x.c_str(), x.size(), 0, 0/*&(params[i].buffer_length)*/);
         params[i].buffer_type = MYSQL_TYPE_STRING;
-        params[i].buffer = (void*)x.c_str();
+        params[i].buffer = (void *)x.c_str();
+        std::cout << "c++ buffer addr: " << params[i].buffer << std::endl;
         params[i].buffer_length = x.size();
     }
 
@@ -138,11 +141,13 @@ public:
         {
             if(params[i].buffer_type == MYSQL_TYPE_STRING)
             {
-                std::cout << "index：" << i << ", string parmas: " << std::string((char*)params[i].buffer, params[i].buffer_length) << std::endl;
+                std::cout << "index：" << i << ", string parmas: " << std::string((char*)(params[i].buffer), params[i].buffer_length) << std::endl;
+                printf("buffer addr: %p\n", params[i].buffer);
             }
             if(params[i].buffer_type == MYSQL_TYPE_LONG)
             {
                 std::cout << "index：" << i << ", long parmas: " << *(int*)params[i].buffer << std::endl;
+                printf("buffer addr: %p\n", params[i].buffer);
             }
         }
         mysql_stmt_bind_param(stmt, params);
