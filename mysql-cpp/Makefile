@@ -15,7 +15,7 @@ test: test.o
 	gcc $< -o $@ $(CXXFLAGS)
 
 test.o: test.cpp
-test.cpp: mysql.hpp
+test.cpp: mysqlcpp.h
 
 clean:
 	rm -rf test

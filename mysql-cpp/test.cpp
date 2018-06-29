@@ -4,15 +4,15 @@
 
 void create_test_table(MySQLCpp &sql)
 {
-    Stmt stmt = sql.prepare("DROP TABLE IF EXISTS `students`");
-    if(!stmt)
+    Stmt dropStmt = sql.prepare("DROP TABLE IF EXISTS `students`");
+    if(!dropStmt)
     {
         std::cout << "drop table failed" << std::endl;
         return;
     }
-    stmt.execute();
+    dropStmt.execute();
 
-    stmt = sql.prepare("CREATE TABLE `students` (\r\n"
+    Stmt createStmt = sql.prepare("CREATE TABLE `students` (\r\n"
         "`id` int NOT NULL AUTO_INCREMENT,\r\n"
         "`name` varchar(64) DEFAULT NULL,\r\n"
         "`sex` varchar(64) DEFAULT NULL,\r\n"
@@ -20,12 +20,12 @@ void create_test_table(MySQLCpp &sql)
         "`height` float DEFAULT NULL\r\n,"
         "PRIMARY KEY(`id`)\r\n"
         ") ENGINE = InnoDB DEFAULT CHARSET = utf8");
-    if(!stmt)
+    if(!createStmt)
     {
         std::cout << "create table failed" << std::endl;
         return;
     }
-    stmt.execute();
+    createStmt.execute();
 }
 
 void clear_table_students(MySQLCpp &sql)
@@ -111,30 +111,41 @@ void update_with_test(MySQLCpp &sql)
     stmt.execute(70, std::string("Jobs"));
 }
 
-int main()
+int main(int argc, char *argv[])
 {
     MySQLCpp sql{};
     if(!sql.connect("10.0.184.1", "root", "tory_admin", "test", 3306))
     {
         return 1;
     }
+
     create_test_table(sql);
+
     std::cout << "=========== insert =============" << std::endl;
     insert_into_test(sql);
     fetch_from_test(sql);
+
     std::cout << "============= clear ============" << std::endl;
     clear_table_students(sql);
     fetch_from_test(sql);
+
     std::cout << "============= insert ===========" << std::endl;
     insert_into_test(sql);
     fetch_from_test(sql);
+
+    std::cout << "=========== regex count ========" << std::endl;
     count_regex_like(sql);
+
     std::cout << "========== regex serach ========" << std::endl;
     regex_query(sql);
+
     std::cout << "============= update ===========" << std::endl;
     update_with_test(sql);
     fetch_from_test(sql);
+
     std::cout << "============= delete ============" << std::endl;
     delete_from_test(sql);
     fetch_from_test(sql);
+
+    return 0;
 }
