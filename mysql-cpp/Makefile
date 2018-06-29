@@ -1,5 +1,5 @@
 LIBS=-L/usr/lib64/mysql -lmysqlclient -lstdc++
-CXXFLAGS=-std=c++11
+CXXFLAGS=-std=c++11 -O0 -g
 
 .PHONY: all clean check
 
